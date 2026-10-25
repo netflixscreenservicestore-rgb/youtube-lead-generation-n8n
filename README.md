@@ -25,6 +25,23 @@ This repo includes **two versions** of the pipeline:
   subscribers and "posted within" days at runtime)
 
 ---
+---
+
+## 🖼️ Workflow Canvas
+
+![Workflow Canvas](workflow-canvas.png)
+
+---
+
+## ✅ Successful Execution
+
+![Execution Success](execution-success.png)
+
+---
+
+## 📊 Sample Output (Google Sheets)
+
+![Sheet Output](sheet-output-sample.png)
 
 ## 🔄 How It Works (Step by Step)
 Form Trigger (Search word [+ optional filters])
