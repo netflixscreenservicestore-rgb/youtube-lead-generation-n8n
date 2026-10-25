@@ -1,0 +1,497 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "YouTube Channel Finder",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Search word",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [-672, -128],
+      "id": "7ae67e6a-db83-407d-be4b-49756865bdf1",
+      "name": "On form submission",
+      "webhookId": "2c53dc67-c00c-4480-9ba8-d65cd04821ab"
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/youtube/v3/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "part", "value": "snippet" },
+            { "name": "q", "value": "={{ $json['Search word'] }}" },
+            { "name": "maxResults", "value": "100" },
+            { "name": "key", "value": "YOUR_YOUTUBE_API_KEY_HERE" },
+            { "name": "type", "value": "channel" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-448, -128],
+      "id": "8d7daa07-54eb-4f1b-aea2-e239afdbc462",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ids = [];\n\nfor (const item of $input.all()) {\n  const channels = item.json.items || [];\n  for (const ch of channels) {\n    if (ch.id && ch.id.channelId) {\n      ids.push(ch.id.channelId);\n    }\n  }\n}\n\nreturn [{ json: { channelIds: ids.join(\",\") } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-272, -128],
+      "id": "df0c47c3-0b4c-4ee7-bb35-65d7992d1003",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/youtube/v3/channels",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "part", "value": "snippet,statistics,contentDetails" },
+            { "name": "id", "value": "={{ $json.channelIds }}" },
+            { "name": "key", "value": "YOUR_YOUTUBE_API_KEY_HERE" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-64, -128],
+      "id": "1fd7f548-1929-4d3f-bc55-2eed04497dce",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const MIN_SUBS = 2000;   // <-- change your minimum here\nconst MAX_SUBS = 20000;  // <-- change your maximum here\n\nconst results = [];\n\nfor (const item of $input.all()) {\n  const channels = item.json.items || [];\n\n  for (const ch of channels) {\n    const subs = parseInt(ch.statistics?.subscriberCount || \"0\", 10);\n\n    if (isNaN(subs) || subs < MIN_SUBS || subs > MAX_SUBS) continue;\n\n    const bio = (ch.snippet?.description || \"\");\n\n    const foundEmails = bio.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g) || [];\n    const cleanEmails = foundEmails.filter(e => !/\\.(png|jpg|jpeg|gif|webp|svg)$/i.test(e));\n    const email = cleanEmails.length ? [...new Set(cleanEmails)].slice(0, 3).join(\", \") : \"\";\n\n    const grab = (re) => { const m = bio.match(re); return m ? m[0] : \"\"; };\n    const instagram = grab(/(https?:\\/\\/)?(www\\.)?instagram\\.com\\/[A-Za-z0-9_.]+/i);\n    const twitter   = grab(/(https?:\\/\\/)?(www\\.)?(twitter|x)\\.com\\/[A-Za-z0-9_]+/i);\n    const tiktok    = grab(/(https?:\\/\\/)?(www\\.)?tiktok\\.com\\/@?[A-Za-z0-9_.]+/i);\n    const facebook  = grab(/(https?:\\/\\/)?(www\\.)?facebook\\.com\\/[A-Za-z0-9_.\\/-]+/i);\n    const linkedin  = grab(/(https?:\\/\\/)?(www\\.)?linkedin\\.com\\/[A-Za-z0-9_.\\/-]+/i);\n\n    const allLinks = bio.match(/https?:\\/\\/[^\\s]+/gi) || [];\n    const website = allLinks.find(l =>\n      !/(instagram|twitter|x|tiktok|facebook|linkedin|youtube)\\.com/i.test(l)\n    ) || \"\";\n\n    results.push({\n      json: {\n        name: ch.snippet?.title || \"\",\n        bio: bio,\n        subscribers: subs,\n        views: ch.statistics?.viewCount || \"0\",\n        videos: ch.statistics?.videoCount || \"0\",\n        country: ch.snippet?.country || \"\",\n        customUrl: ch.snippet?.customUrl ? \"https://youtube.com/\" + ch.snippet.customUrl : \"\",\n        uploadsPlaylistId: ch.contentDetails?.relatedPlaylists?.uploads || \"\",\n        email, website, instagram, twitter, tiktok, facebook, linkedin\n      }\n    });\n  }\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [192, -128],
+      "id": "501afa26-4c66-46a0-8c63-d537929b2dba",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/youtube/v3/playlistItems",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "part", "value": "snippet,contentDetails" },
+            { "name": "playlistId", "value": "={{ $json.uploadsPlaylistId }}" },
+            { "name": "maxResults", "value": "1" },
+            { "name": "key", "value": "YOUR_YOUTUBE_API_KEY_HERE" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [432, -128],
+      "id": "5c7e09ca-dde8-4908-ae3b-2886e3330a5c",
+      "name": "HTTP Request2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const DAYS = 10;\nconst cutoff = new Date(Date.now() - DAYS * 24 * 60 * 60 * 1000);\n\nconst videoData = $input.all();\nconst channels  = $(\"Code in JavaScript1\").all();\n\nconst results = [];\n\nfor (let i = 0; i < videoData.length; i++) {\n  const v  = videoData[i].json;\n  const ch = channels[i] ? channels[i].json : {};\n\n  const latest = v.items?.[0]?.contentDetails?.videoPublishedAt\n              || v.items?.[0]?.snippet?.publishedAt\n              || \"\";\n\n  if (latest && new Date(latest) >= cutoff) {\n    results.push({\n      json: { ...ch, lastVideoDate: latest.substring(0, 10) }\n    });\n  }\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [656, -128],
+      "id": "71c4758d-0f67-4d3b-8bdd-2b75469288de",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_YOUTUBE_LEADS_SHEET_ID_HERE",
+          "mode": "list",
+          "cachedResultName": "Youtube leads "
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID_HERE",
+          "mode": "list",
+          "cachedResultName": "YouTube Leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "bio": "={{ $json.bio }}",
+            "name": "={{ $json.name }}",
+            "subscribers": "={{ $json.subscribers }}",
+            "views": "={{ $json.views }}",
+            "videos": "={{ $json.videos }}",
+            "country": "={{ $json.country }}",
+            "customUrl": "={{ $json.customUrl }}",
+            "email": "={{ $json.email }}",
+            "website": "={{ $json.website }}",
+            "instagram": "={{ $json.instagram }}",
+            "twitter": "={{ $json.twitter }}",
+            "tiktok": "={{ $json.tiktok }}",
+            "facebook": "={{ $json.facebook }}",
+            "linkedin": "={{ $json.linkedin }}",
+            "lastVideoDate": "={{ $json.lastVideoDate }}",
+            "allLinks": "={{ $json.allLinks }}"
+          },
+          "matchingColumns": ["name"],
+          "schema": [
+            { "id": "name", "displayName": "name", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "bio", "displayName": "bio", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "subscribers", "displayName": "subscribers", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "views", "displayName": "views", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "videos", "displayName": "videos", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "country", "displayName": "country", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "customUrl", "displayName": "customUrl", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "email", "displayName": "email", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "website", "displayName": "website", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "instagram", "displayName": "instagram", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "twitter", "displayName": "twitter", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "tiktok", "displayName": "tiktok", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "facebook", "displayName": "facebook", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "linkedin", "displayName": "linkedin", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "lastVideoDate", "displayName": "lastVideoDate", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "allLinks", "displayName": "allLinks", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1328, -128],
+      "id": "da085a15-fc6c-4ccc-9cf7-b4863bf6b2d6",
+      "name": "Append or update row in sheet"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.customUrl }}/about?hl=en",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "User-Agent", "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" }
+          ]
+        },
+        "options": {
+          "response": { "response": { "responseFormat": "text" } }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [864, -128],
+      "id": "cbd75713-f4ec-4727-a755-b607349cdda7",
+      "name": "HTTP Request3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const pages = $input.all();\nconst leads = $(\"Code in JavaScript2\").all();\n\nconst results = [];\nfor (let i = 0; i < pages.length; i++) {\n  let html = String(pages[i].json.data || pages[i].json.body || \"\");\n  html = html.replace(/\\\\u0026/g, \"&\").replace(/\\\\\\//g, \"/\");\n\n  const found = [];\n  const re = /redirect\\?[^\"'\\\\ ]*?q=([^&\"'\\\\ ]+)/g;\n  let m;\n  while ((m = re.exec(html)) !== null) {\n    try {\n      const url = decodeURIComponent(m[1]);\n      if (!/youtube\\.com/i.test(url)) found.push(url);\n    } catch (e) {}\n  }\n  const unique = [...new Set(found)];\n\n  const pick = (rx) => unique.find(u => rx.test(u)) || \"\";\n  const pInstagram = pick(/instagram\\.com/i);\n  const pFacebook  = pick(/facebook\\.com/i);\n  const pTwitter   = pick(/(twitter|x)\\.com/i);\n  const pTiktok    = pick(/tiktok\\.com/i);\n  const pLinkedin  = pick(/linkedin\\.com/i);\n  const pWebsite   = unique.find(u =>\n    !/(instagram|facebook|twitter|x|tiktok|linkedin)\\.com/i.test(u)) || \"\";\n\n  const lead = leads[i] ? leads[i].json : {};\n\n  results.push({ json: {\n    ...lead,\n    instagram: pInstagram || lead.instagram || \"\",\n    twitter:   pTwitter   || lead.twitter   || \"\",\n    tiktok:    pTiktok    || lead.tiktok    || \"\",\n    facebook:  pFacebook  || lead.facebook  || \"\",\n    linkedin:  pLinkedin  || lead.linkedin  || \"\",\n    website:   pWebsite   || lead.website   || \"\",\n    allLinks:  unique.join(\", \")\n  }});\n}\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1072, -128],
+      "id": "2ee9b2b1-8cc0-4c33-8bfe-53ee8635f1ac",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/youtube/v3/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "part", "value": "snippet" },
+            { "name": "q", "value": "={{ $json['Search word'] }}" },
+            { "name": "maxResults", "value": "100" },
+            { "name": "key", "value": "YOUR_YOUTUBE_API_KEY_HERE" },
+            { "name": "type", "value": "channel" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-432, 176],
+      "id": "327cd869-106f-4161-9d04-c28c947a6c4b",
+      "name": "HTTP Request4"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ids = [];\n\nfor (const item of $input.all()) {\n  const channels = item.json.items || [];\n  for (const ch of channels) {\n    if (ch.id && ch.id.channelId) {\n      ids.push(ch.id.channelId);\n    }\n  }\n}\n\nreturn [{ json: { channelIds: ids.join(\",\") } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-256, 176],
+      "id": "179e64b4-742b-4e23-98cf-1e7733418906",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/youtube/v3/channels",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "part", "value": "snippet,statistics,contentDetails" },
+            { "name": "id", "value": "={{ $json.channelIds }}" },
+            { "name": "key", "value": "YOUR_YOUTUBE_API_KEY_HERE" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-48, 176],
+      "id": "5a6f8569-40b7-47a2-a7ff-848b60d1397b",
+      "name": "HTTP Request5"
+    },
+    {
+      "parameters": {
+        "jsCode": "let form = {};\ntry { form = $('On form submission').first().json; } catch (e) { form = {}; }\n\nconst cleanNum = (v) => {\n  const s = String(v == null ? '' : v).toLowerCase();\n  if (s === '' || s.includes('no')) return null;\n  const n = parseInt(s.replace(/[^0-9]/g, ''), 10);\n  return isNaN(n) ? null : n;\n};\n\nconst MIN_SUBS = cleanNum(form['Minimum subscribers']) ?? 0;\nconst MAX_SUBS = cleanNum(form['Maximum subscribers']) ?? Infinity;\n\nconst results = [];\nfor (const item of $input.all()) {\n  const channels = item.json.items || [];\n\n  for (const ch of channels) {\n    const subs = parseInt(ch.statistics?.subscriberCount || \"0\", 10);\n    if (isNaN(subs) || subs < MIN_SUBS || subs > MAX_SUBS) continue;\n\n    const bio = (ch.snippet?.description || \"\");\n\n    const foundEmails = bio.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g) || [];\n    const cleanEmails = foundEmails.filter(e => !/\\.(png|jpg|jpeg|gif|webp|svg)$/i.test(e));\n    const email = cleanEmails.length ? [...new Set(cleanEmails)].slice(0, 3).join(\", \") : \"\";\n\n    const grab = (re) => { const m = bio.match(re); return m ? m[0] : \"\"; };\n    const instagram = grab(/(https?:\\/\\/)?(www\\.)?instagram\\.com\\/[A-Za-z0-9_.]+/i);\n    const twitter   = grab(/(https?:\\/\\/)?(www\\.)?(twitter|x)\\.com\\/[A-Za-z0-9_]+/i);\n    const tiktok    = grab(/(https?:\\/\\/)?(www\\.)?tiktok\\.com\\/@?[A-Za-z0-9_.]+/i);\n    const facebook  = grab(/(https?:\\/\\/)?(www\\.)?facebook\\.com\\/[A-Za-z0-9_.\\/-]+/i);\n    const linkedin  = grab(/(https?:\\/\\/)?(www\\.)?linkedin\\.com\\/[A-Za-z0-9_.\\/-]+/i);\n\n    const allLinks = bio.match(/https?:\\/\\/[^\\s]+/gi) || [];\n    const website = allLinks.find(l =>\n      !/(instagram|twitter|x|tiktok|facebook|linkedin|youtube)\\.com/i.test(l)) || \"\";\n\n    results.push({ json: {\n      channelId: ch.id,\n      name: ch.snippet?.title || \"\",\n      bio, subscribers: subs,\n      views: ch.statistics?.viewCount || \"0\",\n      videos: ch.statistics?.videoCount || \"0\",\n      country: ch.snippet?.country || \"\",\n      customUrl: ch.snippet?.customUrl ? \"https://youtube.com/\" + ch.snippet.customUrl : \"\",\n      uploadsPlaylistId: ch.contentDetails?.relatedPlaylists?.uploads || \"\",\n      email, website, instagram, twitter, tiktok, facebook, linkedin\n    }});\n  }\n}\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [208, 176],
+      "id": "a9cd8229-8d60-4fd8-ac73-6d8692ed8934",
+      "name": "Code in JavaScript5"
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/youtube/v3/playlistItems",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "part", "value": "snippet,contentDetails" },
+            { "name": "playlistId", "value": "={{ $json.uploadsPlaylistId }}" },
+            { "name": "maxResults", "value": "1" },
+            { "name": "key", "value": "YOUR_YOUTUBE_API_KEY_HERE" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [448, 176],
+      "id": "dec82ceb-dc80-4ce5-82a4-f9e3169dfae0",
+      "name": "HTTP Request6",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "let form = {};\ntry { form = $('On form submission').first().json; } catch (e) { form = {}; }\n\nconst daysRaw = String(form['Posted within (days)'] || '10').toLowerCase();\nconst DAYS = daysRaw.includes('any') ? 100000 : (parseInt(daysRaw.replace(/[^0-9]/g, ''), 10) || 10);\nconst cutoff = new Date(Date.now() - DAYS * 24 * 60 * 60 * 1000);\n\nconst videoData = $input.all();\nconst channels  = $(\"Code in JavaScript5\").all();\n\nconst results = [];\n\nfor (let i = 0; i < videoData.length; i++) {\n  const v  = videoData[i].json;\n  const ch = channels[i] ? channels[i].json : {};\n\n  const latest = v.items?.[0]?.contentDetails?.videoPublishedAt\n              || v.items?.[0]?.snippet?.publishedAt\n              || \"\";\n\n  if (latest && new Date(latest) >= cutoff) {\n    results.push({\n      json: { ...ch, lastVideoDate: latest.substring(0, 10) }\n    });\n  }\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [672, 176],
+      "id": "a0a92d8c-8605-43c4-8057-bf55f65bcb21",
+      "name": "Code in JavaScript6"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_YOUTUBE_LEADS_SHEET_ID_HERE",
+          "mode": "list",
+          "cachedResultName": "Youtube leads "
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID_HERE",
+          "mode": "list",
+          "cachedResultName": "YouTube Leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "bio": "={{ $json.bio }}",
+            "name": "={{ $json.name }}",
+            "subscribers": "={{ $json.subscribers }}",
+            "views": "={{ $json.views }}",
+            "videos": "={{ $json.videos }}",
+            "country": "={{ $json.country }}",
+            "customUrl": "={{ $json.customUrl }}",
+            "email": "={{ $json.email }}",
+            "website": "={{ $json.website }}",
+            "instagram": "={{ $json.instagram }}",
+            "twitter": "={{ $json.twitter }}",
+            "tiktok": "={{ $json.tiktok }}",
+            "facebook": "={{ $json.facebook }}",
+            "linkedin": "={{ $json.linkedin }}",
+            "lastVideoDate": "={{ $json.lastVideoDate }}",
+            "allLinks": "={{ $json.allLinks }}"
+          },
+          "matchingColumns": ["name"],
+          "schema": [
+            { "id": "name", "displayName": "name", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "bio", "displayName": "bio", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "subscribers", "displayName": "subscribers", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "views", "displayName": "views", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "videos", "displayName": "videos", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "country", "displayName": "country", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "customUrl", "displayName": "customUrl", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "email", "displayName": "email", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "website", "displayName": "website", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "instagram", "displayName": "instagram", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "twitter", "displayName": "twitter", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "tiktok", "displayName": "tiktok", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "facebook", "displayName": "facebook", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "linkedin", "displayName": "linkedin", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "lastVideoDate", "displayName": "lastVideoDate", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "allLinks", "displayName": "allLinks", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1344, 176],
+      "id": "532e9498-afb3-4833-b09d-dacbc5ee851b",
+      "name": "Append or update row in sheet1"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.customUrl }}/about?hl=en",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "User-Agent", "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" }
+          ]
+        },
+        "options": {
+          "batching": { "batch": { "batchSize": 5, "batchInterval": 2000 } },
+          "response": { "response": { "responseFormat": "text" } },
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [880, 176],
+      "id": "8c5dc790-e40e-4243-80c3-09722fcea9be",
+      "name": "HTTP Request7",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const pages = $input.all();\nconst leads = $(\"Code in JavaScript6\").all();\n\nconst results = [];\nfor (let i = 0; i < pages.length; i++) {\n  let html = String(pages[i].json.data || pages[i].json.body || \"\");\n  html = html.replace(/\\\\u0026/g, \"&\").replace(/\\\\\\//g, \"/\");\n\n  const found = [];\n  const re = /redirect\\?[^\"'\\\\ ]*?q=([^&\"'\\\\ ]+)/g;\n  let m;\n  while ((m = re.exec(html)) !== null) {\n    try {\n      const url = decodeURIComponent(m[1]);\n      if (!/youtube\\.com/i.test(url)) found.push(url);\n    } catch (e) {}\n  }\n  const unique = [...new Set(found)];\n\n  const pick = (rx) => unique.find(u => rx.test(u)) || \"\";\n  const pInstagram = pick(/instagram\\.com/i);\n  const pFacebook  = pick(/facebook\\.com/i);\n  const pTwitter   = pick(/(twitter|x)\\.com/i);\n  const pTiktok    = pick(/tiktok\\.com/i);\n  const pLinkedin  = pick(/linkedin\\.com/i);\n  const pWebsite   = unique.find(u =>\n    !/(instagram|facebook|twitter|x|tiktok|linkedin)\\.com/i.test(u)) || \"\";\n\n  const lead = leads[i] ? leads[i].json : {};\n\n  results.push({ json: {\n    ...lead,\n    instagram: pInstagram || lead.instagram || \"\",\n    twitter:   pTwitter   || lead.twitter   || \"\",\n    tiktok:    pTiktok    || lead.tiktok    || \"\",\n    facebook:  pFacebook  || lead.facebook  || \"\",\n    linkedin:  pLinkedin  || lead.linkedin  || \"\",\n    website:   pWebsite   || lead.website   || \"\",\n    allLinks:  unique.join(\", \")\n  }});\n}\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1088, 176],
+      "id": "661531c2-9e89-4a6c-8088-b1284ae02a23",
+      "name": "Code in JavaScript7"
+    },
+    {
+      "parameters": {
+        "formTitle": "YouTube Channel Finder",
+        "formFields": {
+          "values": [
+            { "fieldLabel": "Search word", "requiredField": true },
+            {
+              "fieldLabel": "Minimum subscribers",
+              "fieldType": "dropdown",
+              "defaultValue": "2000",
+              "fieldOptions": {
+                "values": [
+                  { "option": "3000" }, { "option": "4000" }, { "option": "5000" },
+                  { "option": "6000" }, { "option": "7000" }, { "option": "8000" },
+                  { "option": "9000" }, { "option": "10000" }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Maximum subscribers",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  { "option": "20000" }, { "option": "25000" }, { "option": "30000" },
+                  { "option": "35000" }, { "option": "40000" }, { "option": "45000" },
+                  { "option": "50000" }, { "option": "100000" }, { "option": "200000" },
+                  { "option": "300000" }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Posted within (days)",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  { "option": "1" }, { "option": "2" }, { "option": "3" },
+                  { "option": "4" }, { "option": "5" }, { "option": "6" },
+                  { "option": "7" }, { "option": "8" }, { "option": "9" },
+                  { "option": "10" }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [-656, 176],
+      "id": "5b9cd0f0-fab4-43e8-87c1-071ff72312a0",
+      "name": "collect IDs",
+      "webhookId": "8f396fee-6f48-4efd-a602-52ef3b8a9065"
+    }
+  ],
+  "connections": {
+    "On form submission": { "main": [[{ "node": "HTTP Request", "type": "main", "index": 0 }]] },
+    "HTTP Request": { "main": [[{ "node": "Code in JavaScript", "type": "main", "index": 0 }]] },
+    "Code in JavaScript": { "main": [[{ "node": "HTTP Request1", "type": "main", "index": 0 }]] },
+    "HTTP Request1": { "main": [[{ "node": "Code in JavaScript1", "type": "main", "index": 0 }]] },
+    "Code in JavaScript1": { "main": [[{ "node": "HTTP Request2", "type": "main", "index": 0 }]] },
+    "HTTP Request2": { "main": [[{ "node": "Code in JavaScript2", "type": "main", "index": 0 }]] },
+    "Code in JavaScript2": { "main": [[{ "node": "HTTP Request3", "type": "main", "index": 0 }]] },
+    "HTTP Request3": { "main": [[{ "node": "Code in JavaScript3", "type": "main", "index": 0 }]] },
+    "Code in JavaScript3": { "main": [[{ "node": "Append or update row in sheet", "type": "main", "index": 0 }]] },
+    "HTTP Request4": { "main": [[{ "node": "Code in JavaScript4", "type": "main", "index": 0 }]] },
+    "Code in JavaScript4": { "main": [[{ "node": "HTTP Request5", "type": "main", "index": 0 }]] },
+    "HTTP Request5": { "main": [[{ "node": "Code in JavaScript5", "type": "main", "index": 0 }]] },
+    "Code in JavaScript5": { "main": [[{ "node": "HTTP Request6", "type": "main", "index": 0 }]] },
+    "HTTP Request6": { "main": [[{ "node": "Code in JavaScript6", "type": "main", "index": 0 }]] },
+    "Code in JavaScript6": { "main": [[{ "node": "HTTP Request7", "type": "main", "index": 0 }]] },
+    "HTTP Request7": { "main": [[{ "node": "Code in JavaScript7", "type": "main", "index": 0 }]] },
+    "Code in JavaScript7": { "main": [[{ "node": "Append or update row in sheet1", "type": "main", "index": 0 }]] },
+    "collect IDs": { "main": [[{ "node": "HTTP Request4", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
